@@ -1,0 +1,733 @@
+#include <SFML/Graphics.hpp>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <chrono>
+#include <thread>
+using namespace std;
+using namespace std::chrono;
+class numTile
+{
+public:
+    sf::RectangleShape tileDisplay;
+    numTile(int size);
+    bool isPrime;
+    bool isYellow; //used for visualization
+    bool justPassed; //used for Sundaram visualization
+};
+
+numTile::numTile(int size)
+{
+    tileDisplay.setSize(sf::Vector2f(size, size));
+    tileDisplay.setFillColor(sf::Color::White);
+    isPrime = true;
+    isYellow = false;
+    justPassed = false;
+}
+bool* SieveOfEratosthenes(long long n)
+{
+    // primeList
+    bool* prime = new bool[n + 1];
+    //fills block of memeory with array size of primeList
+    memset(prime, true, (n + 1) * sizeof(bool));
+    //set p=2 for the first prime number
+    prime[0] = false;
+    prime[1] = false;
+    for (long long p = 2; p * p <= n; p++)
+    {
+        if (prime[p] == true)
+        {
+            for (long long i = p * p; i <= n; i += p)
+                prime[i] = false;
+        }
+    }
+    // output all prime numbers
+    return prime;
+}
+bool* SieveOfSundaram(long long n)
+{
+    long long newPrime = (n - 1) / 2;
+    bool* mark = new bool[newPrime + 1];
+    bool* prime = new bool[n + 1];
+    memset(mark, false, (newPrime + 1) * sizeof(bool));
+    memset(prime, false, (n + 1) * sizeof(bool));
+    for (long long i = 1; i <= newPrime; i++)
+        if (2 * i * i < newPrime)
+            for (long long j = i; (i + j + 2 * i * j) <= newPrime; j++)
+                mark[i + j + 2 * i * j] = true;
+    if (n >= 2)
+        prime[2] = true;
+    for (long long i = 1; i <= newPrime; i++)
+        if (mark[i] == false)
+            prime[2 * i + 1] = true;
+    delete[] mark;
+    return prime;
+}
+sf::Text CreateText(sf::Font& inputFont, string text, int charSize, sf::Color color, sf::Vector2f posVector)
+{
+    sf::Text inputText;
+    inputText.setFont(inputFont);
+    inputText.setString(text);
+    inputText.setCharacterSize(charSize);
+    inputText.setFillColor(color);
+    inputText.setPosition(posVector);
+    return inputText;
+}
+
+int main()
+{
+    sf::RenderWindow window(sf::VideoMode(1000, 800), "Prompt"); //window that takes in user input
+    sf::Font font;
+    using namespace std::this_thread;
+    using namespace std::chrono;
+    if (!font.loadFromFile("fonts/arial.ttf"))
+    {
+        cout << "error" << endl;
+    }
+    //setting up all SFML objects
+    //Instructions and Title
+    string titleS = "Prime Number Calculator";
+    sf::Text title = CreateText(font, "Prime Number Calculator", 36, sf::Color::Red, sf::Vector2f(300.f, 0.f));
+    sf::Text input1 = CreateText(font, "Please enter the number which you would like to find all prime numbers below", 24, sf::Color::Black, sf::Vector2f(5.f, 96.f));
+    sf::Text input2 = CreateText(font, "(must be greater than 1, can't exceed 2^63 - 1)", 24, sf::Color::Black, sf::Vector2f(5.f, 120.f));
+    sf::RectangleShape greenRect(sf::Vector2f(920.f, 70.f));
+    greenRect.setFillColor(sf::Color::Green);
+    sf::RectangleShape whiteRect(sf::Vector2f(916.f, 66.f));
+    greenRect.setPosition(sf::Vector2f(0.f, 90.f));
+    whiteRect.setPosition(sf::Vector2f(2.f, 92.f));
+    //create textbox
+    sf::RectangleShape textBox(sf::Vector2f(400.f, 55.f));
+    textBox.setPosition(450.f, 250.f);
+    textBox.setFillColor(sf::Color::White);
+    sf::Text preTextBox = CreateText(font, "Number:", 36, sf::Color::Green, sf::Vector2f(310.f, 250.f));
+    string currVal;
+    //confirm button at the end
+    sf::RectangleShape confirm(sf::Vector2f(168.f, 55.f));
+    confirm.setPosition(416.f, 650.f);
+    confirm.setFillColor(sf::Color::Green);
+    sf::Text preConfirm = CreateText(font, "Confirm", 46, sf::Color::Black, sf::Vector2f(421.f, 650.f));
+    //textboxes for the 3 algorithm selections
+    sf::RectangleShape algo1Box(sf::Vector2f(500.f, 50.f));
+    algo1Box.setPosition(254.f, 203.f);
+    algo1Box.setFillColor(sf::Color::White);
+    sf::Text algo1 = CreateText(font, "Sieve of Eratosthenes", 36, sf::Color::Black, sf::Vector2f(316.f, 203.f));
+    sf::RectangleShape algo2Box(sf::Vector2f(500.f, 50.f));
+    algo2Box.setPosition(254.f, 273.f);
+    algo2Box.setFillColor(sf::Color::White);
+    sf::Text algo2 = CreateText(font, "Sieve of Sundaram", 36, sf::Color::Black, sf::Vector2f(341.f, 273.f));
+    sf::RectangleShape algo3Box(sf::Vector2f(500.f, 50.f));
+    algo3Box.setPosition(254.f, 343.f);
+    algo3Box.setFillColor(sf::Color::White);
+    sf::Text algo3 = CreateText(font, "Time Comparison", 36, sf::Color::Black, sf::Vector2f(360.f, 343.f));
+    sf::RectangleShape selectedBox(sf::Vector2f(510.f, 56.f));
+    selectedBox.setFillColor(sf::Color::Green);
+    //conditionals for proper user input
+    bool numberInputted = false;
+    bool confirmed = false;
+    int step = 1;
+    bool algo1Selected = false;
+    bool algo2Selected = false;
+    bool algo3Selected = false;
+    //user input broken into 2 steps, first selecting the algorithm, then entering in the desired number
+    while (window.isOpen())
+    {
+        sf::Event event;
+        while (window.pollEvent(event))
+        {
+            if (event.type == sf::Event::Closed || step == 3)
+                window.close();
+            //keyboard input for the second step
+            else if (event.type == sf::Event::KeyPressed)
+            {
+                if (step == 2)
+                {
+                    if (event.key.code == sf::Keyboard::Num0 || event.key.code == sf::Keyboard::Numpad0)
+                    {
+                        if (algo1Selected || algo2Selected)
+                        {
+                            if (currVal.length() != 0 && 10 * stod(currVal) <= 281250)
+                                currVal = currVal + "0";
+                        }
+                        else
+                        {
+                            if (currVal.length() != 0 && stoll(currVal) <= 200000000 / 10)
+                                currVal = currVal + "0";
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num1 || event.key.code == sf::Keyboard::Numpad1)
+                    {
+                        if (algo1Selected || algo2Selected)
+                        {
+                            if (currVal.length() == 0 || 10 * stod(currVal) + 1 <= 281250)
+                                currVal = currVal + "1";
+                        }
+                        else
+                        {
+                            if (currVal.length() == 0 || stoll(currVal) < 200000000 / 10)
+                                currVal = currVal + "1";
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num2 || event.key.code == sf::Keyboard::Numpad2)
+                    {
+                        if (algo1Selected || algo2Selected)
+                        {
+                            if (currVal.length() == 0 || 10 * stod(currVal) + 2 <= 281250)
+                                currVal = currVal + "2";
+                        }
+                        else
+                        {
+                            if (currVal.length() == 0 || stoll(currVal) <= LLONG_MAX / 10)
+                                currVal = currVal + "2";
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num3 || event.key.code == sf::Keyboard::Numpad3)
+                    {
+                        if (algo1Selected || algo2Selected)
+                        {
+                            if (currVal.length() == 0 || 10 * stod(currVal) + 3 <= 281250)
+                                currVal = currVal + "3";
+                        }
+                        else
+                        {
+                            if (currVal.length() == 0 || stoll(currVal) < 200000000 / 10)
+                                currVal = currVal + "3";
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num4 || event.key.code == sf::Keyboard::Numpad4)
+                    {
+                        if (algo1Selected || algo2Selected)
+                        {
+                            if (currVal.length() == 0 || 10 * stod(currVal) + 4 <= 281250)
+                                currVal = currVal + "4";
+                        }
+                        else
+                        {
+                            if (currVal.length() == 0 || stoll(currVal) < 200000000 / 10)
+                                currVal = currVal + "4";
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num5 || event.key.code == sf::Keyboard::Numpad5)
+                    {
+                        if (algo1Selected || algo2Selected)
+                        {
+                            if (currVal.length() == 0 || 10 * stod(currVal) + 5 <= 281250)
+                                currVal = currVal + "5";
+                        }
+                        else
+                        {
+                            if (currVal.length() == 0 || stoll(currVal) < 200000000 / 10)
+                                currVal = currVal + "5";
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num6 || event.key.code == sf::Keyboard::Numpad6)
+                    {
+                        if (algo1Selected || algo2Selected)
+                        {
+                            if (currVal.length() == 0 || 10 * stod(currVal) + 6 <= 281250)
+                                currVal = currVal + "6";
+                        }
+                        else
+                        {
+                            if (currVal.length() == 0 || stoll(currVal) < 200000000 / 10)
+                                currVal = currVal + "6";
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num7 || event.key.code == sf::Keyboard::Numpad7)
+                    {
+                        if (algo1Selected || algo2Selected)
+                        {
+                            if (currVal.length() == 0 || 10 * stod(currVal) + 7 <= 281250)
+                                currVal = currVal + "7";
+                        }
+                        else
+                        {
+                            if (currVal.length() == 0 || stoll(currVal) < 200000000 / 10)
+                                currVal = currVal + "7";
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num8 || event.key.code == sf::Keyboard::Numpad8)
+                    {
+                        if (algo1Selected || algo2Selected)
+                        {
+                            if (currVal.length() == 0 || 10 * stod(currVal) + 8 <= 281250)
+                                currVal = currVal + "8";
+                        }
+                        else
+                        {
+                            if (currVal.length() == 0 || stoll(currVal) < 200000000 / 10)
+                                currVal = currVal + "8";
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num9 || event.key.code == sf::Keyboard::Numpad9)
+                    {
+                        if (algo1Selected || algo2Selected)
+                        {
+                            if (currVal.length() == 0 || 10 * stod(currVal) + 9 <= 281250)
+                                currVal = currVal + "9";
+                        }
+                        else
+                        {
+                            if (currVal.length() == 0 || stoll(currVal) < 200000000 / 10)
+                                currVal = currVal + "9";
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::BackSpace)
+                    {
+                        if (currVal.length() >= 1)
+                            currVal = currVal.substr(0, currVal.length() - 1);
+                    }
+                }
+            }
+            //mouse input for both the first and second steps
+            else if (event.type == sf::Event::MouseButtonPressed)
+            {
+                if (event.mouseButton.button == sf::Mouse::Left)
+                {
+                    if (event.mouseButton.y >= 650 && event.mouseButton.y <= 705 && event.mouseButton.x <= 584 && event.mouseButton.x >= 416)
+                    {
+                        if (numberInputted && stoll(currVal) > 1)
+                        {
+                            step++;
+                        }
+                    }
+                    if (step == 1)
+                    {
+                        if (event.mouseButton.y >= 203 && event.mouseButton.y <= 253 && event.mouseButton.x <= 704 && event.mouseButton.x >= 254)
+                        {
+                            if (!algo1Selected)
+                            {
+                                algo1Selected = true;
+                                algo2Selected = false;
+                                algo3Selected = false;
+                            }
+                        }
+                        else if (event.mouseButton.y >= 273 && event.mouseButton.y <= 323 && event.mouseButton.x <= 704 && event.mouseButton.x >= 254)
+                        {
+                            if (!algo2Selected)
+                            {
+                                algo1Selected = false;
+                                algo2Selected = true;
+                                algo3Selected = false;
+                            }
+                        }
+                        else if (event.mouseButton.y >= 343 && event.mouseButton.y <= 393 && event.mouseButton.x <= 704 && event.mouseButton.x >= 254)
+                        {
+                            if (!algo3Selected)
+                            {
+                                algo1Selected = false;
+                                algo2Selected = false;
+                                algo3Selected = true;
+                            }
+                        }
+                        else if (event.mouseButton.y >= 650 && event.mouseButton.y <= 705 && event.mouseButton.x <= 584 && event.mouseButton.x >= 416)
+                        {
+                            if (algo1Selected || algo2Selected || algo3Selected)
+                            {
+                                confirmed = true;
+                                step++;
+                                //add more with ulam
+                            }
+                        }
+                    }
+                }
+            }
+            if (currVal.length() > 0)
+                numberInputted = true;
+            else
+                numberInputted = false;
+        }
+        //drawing common objects throughout the steps
+        window.clear();
+        window.draw(greenRect);
+        window.draw(whiteRect);
+        window.draw(title);
+        window.draw(confirm);
+        window.draw(preConfirm);
+        //drawing objects for the second step
+        if (confirmed)
+        {
+            input1.setString("Please enter the number which you would like to find all prime numbers below");
+            window.draw(input1);
+            if (algo1Selected || algo2Selected)
+            {
+                input2.setString("(must be greater than 1, recommended < 10000, cannot exceed 281250)");
+            }
+            window.draw(input2);
+            window.draw(textBox);
+            window.draw(preTextBox);
+            sf::Text currValue;
+            currValue.setFont(font);
+            currValue.setString(currVal);
+            if (algo1Selected || algo2Selected)
+                currValue.setCharacterSize(46);
+            else
+                currValue.setCharacterSize(46);
+            currValue.setFillColor(sf::Color::Black);
+            currValue.setPosition(sf::Vector2f(450.f, 250.f));
+            window.draw(currValue);
+        }
+        //drawing objects for the first step
+        else
+        {
+            input1.setString("Choose which algorithm to use");
+            window.draw(input1);
+            if (algo1Selected)
+            {
+                selectedBox.setPosition(sf::Vector2f(249.f, 200.f));
+                window.draw(selectedBox);
+            }
+            else if (algo2Selected)
+            {
+                selectedBox.setPosition(sf::Vector2f(249.f, 270.f));
+                window.draw(selectedBox);
+            }
+            else if (algo3Selected)
+            {
+                selectedBox.setPosition(sf::Vector2f(249.f, 340.f));
+                window.draw(selectedBox);
+            }
+            window.draw(algo1Box);
+            window.draw(algo1);
+            window.draw(algo2Box);
+            window.draw(algo2);
+            window.draw(algo3Box);
+            window.draw(algo3);
+        }
+        window.display();
+    }
+    //visualization portion
+    if (step == 3 && !algo3Selected)
+    {
+        sf::RenderWindow window2(sf::VideoMode(1500, 800), "Visualization"); //visualization window
+        int total = stoi(currVal);
+        int squareSize;
+        //series of if statements to set up square dimensions
+        if (total <= 450)
+            squareSize = 50;
+        else if (total <= 1250)
+            squareSize = 30;
+        else if (total <= 1800)
+            squareSize = 25;
+        else if (total <= 5000)
+            squareSize = 15;
+        else if (total <= 11250)
+            squareSize = 10;
+        else if (total <= 45000)
+            squareSize = 5;
+        else
+            squareSize = 2;
+        int numx = 1500 / squareSize; //number of squares for the length
+        vector<numTile> grid; //initializing grid
+        for (int i = 0; i < total + 1; i++) //1 extra since we are indexing from 1 from the future
+        {
+            numTile temp(squareSize);
+            if (algo2Selected)
+                temp.isPrime = false;
+            grid.push_back(temp);
+        }
+        //setting positions
+        for (int i = 1; i < total + 1; i++)
+        {
+            grid[i].tileDisplay.setPosition(((i - 1) % numx) * squareSize, ((i - 1) / numx) * squareSize);
+        }
+        if (algo1Selected) //Eratosthenes visualization
+        {
+            int p = 2;
+            grid[1].isPrime = false;
+            string firstString = "Filtering out multiples of " + to_string(p) + " greater than or equal to " + to_string(p * p);
+            sf::Text explanation = CreateText(font, firstString, 24, sf::Color::Green, sf::Vector2f(5.f, 770.f));
+
+            string secondString = "Each number is represented by a square placed in increasing order left to right then top to bottom. Black indicates numbers that have been filtered out.";
+            sf::Text key = CreateText(font, secondString, 16, sf::Color::Cyan, sf::Vector2f(5.f, 752.f));
+
+            int redSquare = 2; //index of redsquare used to visualize the algorithm
+            bool displayYellow = false; //conditional used for visualizing the highlighted squares
+            bool displayMag = false; //conditional used to display the primes squares as magenta
+            while (window2.isOpen())
+            {
+                sf::Event event;
+                while (window2.pollEvent(event))
+                {
+                    if (event.type == sf::Event::Closed)
+                        window2.close();
+                }
+                grid[redSquare].tileDisplay.setFillColor(sf::Color::Red);
+                int counter = 0; //counting the primes
+                window2.clear();
+                for (int i = 1; i < total + 1; i++)
+                {
+                    if (grid[i].isPrime || grid[i].isYellow) //will display squares that are being filtered out as yellow, all remaining squares as white
+                    {
+                        if (displayMag)
+                            grid[i].tileDisplay.setFillColor(sf::Color::Magenta);
+                        window2.draw(grid[i].tileDisplay);
+                        grid[i].isYellow = false;
+                        counter++;
+                    }
+                    else
+                    {
+                        grid[i].tileDisplay.setFillColor(sf::Color(0, 0, 150));
+                        window2.draw(grid[i].tileDisplay);
+                    }
+                }
+                //displaying the text
+                window2.draw(explanation);
+                window2.draw(key);
+                window2.display();
+                //perform an algorithm step
+                if (displayYellow)
+                {
+                    sleep_for(milliseconds(500)); //significant delay in the algorithm the help with visualization
+                    grid[redSquare].tileDisplay.setFillColor(sf::Color::White); //reinitializing the red square
+                    redSquare = 0;
+                    displayYellow = false;
+                }
+                else
+                {
+                    //Eratosthenes algorithm set to occur step by step as the outer while loop iterates
+                    if (p * p < total)
+                    {
+                        if (grid[p].isPrime)
+                        {
+                            for (int i = p * p; i <= total; i += p)
+                                if (grid[i].isPrime)
+                                {
+                                    grid[i].isPrime = false;
+                                    grid[i].isYellow = true;
+                                    grid[i].tileDisplay.setFillColor(sf::Color::Yellow);
+                                    displayYellow = true;
+                                }
+                            explanation.setString("Filtering out multiples of " + to_string(p) + " greater than or equal to " + to_string(p * p));
+                            redSquare = p;
+                        }
+                        p++;
+                    }
+                    else
+                    {
+                        displayMag = true;
+                        if (counter == 1)
+                            explanation.setString("Finished. A total of " + to_string(counter) + " prime less than or equal to " + currVal + " (remaining prime in magenta).");
+                        else
+                            explanation.setString("Finished. A total of " + to_string(counter) + " primes less than or equal to " + currVal + " (remaining primes in magenta).");
+                    }
+                }
+            }
+        }
+        if (algo2Selected)
+        {
+            bool endAlgo = false; //marks when to display "grid" over "mark"
+            vector<numTile> mark; //initializing temporary filter grid for Sundaram
+            for (int i = 0; i < (total + 1) / 2; i++)
+            {
+                numTile temp(squareSize);
+                mark.push_back(temp);
+            }
+            for (int i = 1; i < mark.size(); i++) //setting positions of the squares in "mark"
+            {
+                mark[i].tileDisplay.setPosition(((i - 1) % numx) * squareSize, ((i - 1) / numx) * squareSize);
+            }
+            int p = 1;
+            sf::Text explanation = CreateText(font, "Filtering out numbers in the form of 2ij + i + j where j is an integer and i = " + to_string(p), 24, sf::Color::Green, sf::Vector2f(5.f, 770.f));
+
+            sf::Text key = CreateText(font, "Each number is represented by a square placed in increasing order left to right then top to bottom. Black indicates numbers that have been filtered out.", 16, sf::Color::Cyan, sf::Vector2f(5.f, 752.f));
+
+            bool displayYellow = false; //similar purpose as for Sieve of Eratosthenes
+            int redSquare = 0;
+            if (mark.size() > 1)
+                redSquare = 1;
+            bool displayFinalText = false; //cue to display intermediate blue squares and end the algorithm
+            while (window2.isOpen())
+            {
+                sf::Event event;
+                while (window2.pollEvent(event))
+                {
+                    if (event.type == sf::Event::Closed)
+                        window2.close();
+                }
+                window2.clear();
+                window2.draw(key); //displaying text
+                if (endAlgo) //displays grid if the algorithm is complete
+                {
+                    int counter = 0; //counts the number of primes
+                    for (int i = 1; i < total + 1; i++)
+                    {
+                        if (grid[i].isPrime)
+                        {
+                            grid[i].tileDisplay.setFillColor(sf::Color::Magenta);
+                            window2.draw(grid[i].tileDisplay);
+                            counter++;
+                        }
+                        else
+                        {
+                            grid[i].tileDisplay.setFillColor(sf::Color(0, 120, 0));
+                            window2.draw(grid[i].tileDisplay);
+                        }
+                    }
+                    if (counter == 1)
+                        explanation.setString("Finished. A total of " + to_string(counter) + " prime less than or equal to " + currVal + " (remaining prime in magenta).");
+                    else
+                        explanation.setString("Finished. A total of " + to_string(counter) + " primes less than or equal to " + currVal + " (remaining primes in magenta).");
+                    window2.draw(explanation);
+                }
+                else
+                {
+                    //if(displayYellow)
+                    mark[redSquare].tileDisplay.setFillColor(sf::Color::Red);
+                    for (int i = 1; i < mark.size(); i++)
+                    {
+                        if (mark[i].isPrime || mark[i].isYellow) //will display squares that are being filtered out as yellow, all remaining squares as white
+                        {
+                            if (displayFinalText) //displaying remaining squares as blue if cued
+                                mark[i].tileDisplay.setFillColor(sf::Color::Blue);
+                            window2.draw(mark[i].tileDisplay);
+                            mark[i].isYellow = false;
+                        }
+                        else
+                        {
+                            mark[i].tileDisplay.setFillColor(sf::Color(0, 120, 0));
+                            window2.draw(mark[i].tileDisplay);
+                        }
+                        if (i == redSquare && !displayFinalText && displayYellow) //displays red square as red
+                            window2.draw(mark[i].tileDisplay);
+                    }
+                    window2.draw(explanation);
+                    if (displayFinalText)
+                    {
+                        endAlgo = true; //cueing to end the algorithm
+                    }
+                    else
+                    {
+                        mark[redSquare].tileDisplay.setFillColor(sf::Color::White);
+                        redSquare = 0;
+                        if (displayYellow)
+                        {
+                            displayYellow = false;
+                        }
+                        else
+                        {
+                            //Sundaram algorithm set to occur step by step as the outer while loop iterates
+                            if (2 * p * p < mark.size())
+                            {
+                                for (int i = p; (i + p + 2 * i * p) < mark.size(); i++)
+                                    if (mark[i + p + 2 * i * p].isPrime)
+                                    {
+                                        mark[i + p + 2 * i * p].justPassed = true;
+                                        mark[i + p + 2 * i * p].isPrime = false;
+                                        mark[i + p + 2 * i * p].isYellow = true;
+                                        mark[i + p + 2 * i * p].tileDisplay.setFillColor(sf::Color::Yellow);
+                                        displayYellow = true;
+                                    }
+                                redSquare = p;
+                                explanation.setString("Filtering out numbers in the form of 2ij + i + j where j is an integer and i = " + to_string(p));
+                            }
+                            sleep_for(milliseconds(200)); //delay used for visualization
+                            p++;
+                        }
+                        if (2 * p * p >= mark.size())
+                        {
+                            grid[2].isPrime = true;
+                            for (int i = 1; i < mark.size(); i++)
+                            {
+                                if (mark[i].isPrime)
+                                    grid[2 * i + 1].isPrime = true;
+                            }
+                            displayFinalText = true;
+                            explanation.setString("Adding 1 to twice the value of each number left to get the primes (and including 2)");
+                        }
+                    }
+                }
+                window2.display();
+                if (displayFinalText && endAlgo)
+                {
+                    sleep_for(milliseconds(3000)); //3 second delay for visualization of final step
+                    displayFinalText = false;
+                }
+            }
+        }
+    }
+    if (step == 3 && algo3Selected)
+    {
+        sf::RenderWindow window2(sf::VideoMode(1500, 800), "Comparison");
+        int step = 1; //step 1 is computing Eratosthenes, step 2 is computing Sundaram, step 3 makes sure they are equivalent, step 4 displays final thing
+        //4 text objects displaying the comparison of the algorithms
+        sf::Text Eratosthenes = CreateText(font, "Computing...", 36, sf::Color::Green, sf::Vector2f(316.f, 203.f));
+
+        sf::Text Sundaram = CreateText(font, "Standby...", 36, sf::Color::Green, sf::Vector2f(316.f, 243.f));
+
+        sf::Text areEqual = CreateText(font, "Standby...", 36, sf::Color::Green, sf::Vector2f(316.f, 283.f));
+
+        sf::Text totalPrimes = CreateText(font, "Standby...", 36, sf::Color::Green, sf::Vector2f(316.f, 323.f));
+
+        bool* eratoPrime = new bool[69];
+        bool* sundaPrime = new bool[69];
+        long long total = stoll(currVal);
+        while (window2.isOpen())
+        {
+            sf::Event event;
+            while (window2.pollEvent(event))
+            {
+                if (event.type == sf::Event::Closed)
+                    window2.close();
+            }
+            window2.clear();
+            window2.draw(Eratosthenes);
+            window2.draw(Sundaram);
+            window2.draw(areEqual);
+            window2.draw(totalPrimes);
+            window2.display();
+            if (step == 1) //performs Sieve of Eratosthenes and computes the time
+            {
+                delete[] eratoPrime;
+                steady_clock::time_point begin = steady_clock::now();
+                eratoPrime = SieveOfEratosthenes(total);
+                steady_clock::time_point end = steady_clock::now();
+                auto duration = duration_cast<microseconds>(end - begin);
+                string eratoTime = "Processor time taken for sieve of Eratosthenes: " + to_string(duration.count()) + " microseconds";
+                Eratosthenes.setString(eratoTime);
+                Sundaram.setString("Computing...");
+                step++;
+            }
+            else if (step == 2) //performs Sieve of Sundaram and computes the time
+            {
+                delete[] sundaPrime;
+                steady_clock::time_point begin = steady_clock::now();
+                sundaPrime = SieveOfSundaram(total);
+                steady_clock::time_point end = steady_clock::now();
+                auto duration = duration_cast<microseconds>(end - begin);
+                string sundaTime = "Processor time taken for sieve of Sundaram: " + to_string(duration.count()) + " microseconds";
+                Sundaram.setString(sundaTime);
+                areEqual.setString("Computing...");
+                totalPrimes.setString("Computing...");
+                step++;
+            }
+            else if (step == 3) //compares the two arrays to see if they are equivalent
+            {
+                bool equal = true;
+                int counter = 0;
+                for (long long i = 0; i <= total; i++)
+                {
+                    equal = (eratoPrime[i] == sundaPrime[i]);
+                    if (!equal)
+                    {
+                    }
+                    if (eratoPrime[i])
+                        counter++;
+                }
+                if (equal)
+                {
+                    areEqual.setString("Results of the Algorithms are Equal");
+                    totalPrimes.setString("A total of " + to_string(counter) + " primes less than or equal to " + currVal);
+                }
+                else
+                {
+                    areEqual.setString("Results of the Algorithms are not Equal");
+                    totalPrimes.setFillColor(sf::Color::Black);
+                }
+                step++;
+                delete[] eratoPrime;
+                delete[] sundaPrime;
+            }
+        }
+    }
+    return 0;
+}
